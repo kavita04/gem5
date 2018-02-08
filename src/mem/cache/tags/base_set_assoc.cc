@@ -63,7 +63,7 @@ BaseSetAssoc::BaseSetAssoc(const Params *p)
     if (blkSize < 4 || !isPowerOf2(blkSize)) {
         fatal("Block size must be at least 4 and a power of 2");
     }
-    if (numSets <= 0 || !isPowerOf2(numSets)) {
+    if (!isPowerOf2(numSets)) {
         fatal("# of sets must be non-zero and a power of 2");
     }
     if (assoc <= 0) {
@@ -73,8 +73,6 @@ BaseSetAssoc::BaseSetAssoc(const Params *p)
     setShift = floorLog2(blkSize);
     setMask = numSets - 1;
     tagShift = setShift + floorLog2(numSets);
-    /** @todo Make warmup percentage a parameter. */
-    warmupBound = numSets * assoc;
 
     sets = new SetType[numSets];
     blks = new BlkType[numSets * assoc];

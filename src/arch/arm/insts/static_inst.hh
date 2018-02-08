@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010-2013,2016-2017 ARM Limited
+ * Copyright (c) 2010-2013,2016-2018 ARM Limited
  * All rights reserved
  *
  * The license below extends only to copyright in the software and shall
@@ -364,6 +364,11 @@ class ArmStaticInst : public StaticInst
                                                       mnemonic, true);
     }
 
+    // Utility function used by checkForWFxTrap32 and checkForWFxTrap64
+    // Returns true if processor has to trap a WFI/WFE instruction.
+    bool isWFxTrapping(ThreadContext *tc,
+                       ExceptionLevel targetEL, bool isWfe) const;
+
     /**
      * Trap an access to Advanced SIMD or FP registers due to access
      * control bits.
@@ -406,13 +411,71 @@ class ArmStaticInst : public StaticInst
                                     bool fpexc_check, bool advsimd) const;
 
     /**
+     * Check if WFE/WFI instruction execution in aarch32 should be trapped.
+     *
+     * See aarch32/exceptions/traps/AArch32.checkForWFxTrap in the
+     * ARM ARM psueodcode library.
+     */
+    Fault checkForWFxTrap32(ThreadContext *tc,
+                            ExceptionLevel tgtEl, bool isWfe) const;
+
+    /**
+     * Check if WFE/WFI instruction execution in aarch64 should be trapped.
+     *
+     * See aarch64/exceptions/traps/AArch64.checkForWFxTrap in the
+     * ARM ARM psueodcode library.
+     */
+    Fault checkForWFxTrap64(ThreadContext *tc,
+                            ExceptionLevel tgtEl, bool isWfe) const;
+
+    /**
+     * WFE/WFI trapping helper function.
+     */
+    Fault trapWFx(ThreadContext *tc, CPSR cpsr, SCR scr, bool isWfe) const;
+
+    /**
+     * Check if SETEND instruction execution in aarch32 should be trapped.
+     *
+     * See aarch32/exceptions/traps/AArch32.CheckSETENDEnabled in the
+     * ARM ARM pseudocode library.
+     */
+    Fault checkSETENDEnabled(ThreadContext *tc, CPSR cpsr) const;
+
+    /**
+     * UNDEFINED behaviour in AArch32
+     *
+     * See aarch32/exceptions/traps/AArch32.UndefinedFault in the
+     * ARM ARM pseudocode library.
+     */
+    Fault undefinedFault32(ThreadContext *tc, ExceptionLevel el) const;
+
+    /**
+     * UNDEFINED behaviour in AArch64
+     *
+     * See aarch64/exceptions/traps/AArch64.UndefinedFault in the
+     * ARM ARM pseudocode library.
+     */
+    Fault undefinedFault64(ThreadContext *tc, ExceptionLevel el) const;
+
+    /**
      * Get the new PSTATE from a SPSR register in preparation for an
      * exception return.
      *
      * See shared/functions/system/SetPSTATEFromPSR in the ARM ARM
-     * psueodcode library.
+     * pseudocode library.
      */
     CPSR getPSTATEFromPSR(ThreadContext *tc, CPSR cpsr, CPSR spsr) const;
+
+    /**
+     * Return true if exceptions normally routed to EL1 are being handled
+     * at an Exception level using AArch64, because either EL1 is using
+     * AArch64 or TGE is in force and EL2 is using AArch64.
+     *
+     * See aarch32/exceptions/exceptions/AArch32.GeneralExceptionsToAArch64
+     * in the ARM ARM pseudocode library.
+     */
+    bool generalExceptionsToAArch64(ThreadContext *tc,
+                                    ExceptionLevel pstateEL) const;
 
   public:
     virtual void
@@ -422,6 +485,25 @@ class ArmStaticInst : public StaticInst
     getIntWidth() const
     {
         return intWidth;
+    }
+
+    /** Returns the byte size of current instruction */
+    ssize_t
+    instSize() const
+    {
+        return (!machInst.thumb || machInst.bigThumb) ? 4 : 2;
+    }
+
+    /**
+     * Returns the real encoding of the instruction:
+     * the machInst field is in fact always 64 bit wide and
+     * contains some instruction metadata, which means it differs
+     * from the real opcode.
+     */
+    MachInst
+    encoding() const
+    {
+        return static_cast<MachInst>(machInst & (mask(instSize() * 8)));
     }
 };
 }

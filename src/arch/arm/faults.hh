@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010, 2012-2013, 2016-2017 ARM Limited
+ * Copyright (c) 2010, 2012-2013, 2016-2018 ARM Limited
  * All rights reserved
  *
  * The license below extends only to copyright in the software and shall
@@ -72,6 +72,8 @@ class ArmFault : public FaultBase
     ExceptionLevel fromEL;  // Source exception level
     ExceptionLevel toEL;  // Target exception level
     OperatingMode fromMode;  // Source operating mode
+
+    bool hypRouted; // True if the fault has been routed to Hypervisor
 
     Addr getVector(ThreadContext *tc);
     Addr getVector64(ThreadContext *tc);
@@ -173,7 +175,7 @@ class ArmFault : public FaultBase
 
     ArmFault(ExtMachInst _machInst = 0, uint32_t _iss = 0) :
         machInst(_machInst), issRaw(_iss), from64(false), to64(false),
-        fromEL(EL0), toEL(EL0), fromMode(MODE_UNDEFINED) {}
+        fromEL(EL0), toEL(EL0), fromMode(MODE_UNDEFINED), hypRouted(false) {}
 
     // Returns the actual syndrome register to use based on the target
     // exception level
@@ -189,7 +191,7 @@ class ArmFault : public FaultBase
     virtual void annotate(AnnotationIDs id, uint64_t val) {}
     virtual FaultStat& countStat() = 0;
     virtual FaultOffset offset(ThreadContext *tc) = 0;
-    virtual FaultOffset offset64() = 0;
+    virtual FaultOffset offset64(ThreadContext *tc) = 0;
     virtual OperatingMode nextMode() = 0;
     virtual bool routeToMonitor(ThreadContext *tc) const = 0;
     virtual bool routeToHyp(ThreadContext *tc) const { return false; }
@@ -219,17 +221,7 @@ class ArmFaultVals : public ArmFault
     FaultStat & countStat() override { return vals.count; }
     FaultOffset offset(ThreadContext *tc) override;
 
-    FaultOffset offset64() override {
-        if (toEL == fromEL) {
-            if (opModeIsT(fromMode))
-                return vals.currELTOffset;
-            return vals.currELHOffset;
-        } else {
-            if (from64)
-                return vals.lowerEL64Offset;
-            return vals.lowerEL32Offset;
-        }
-    }
+    FaultOffset offset64(ThreadContext *tc) override;
 
     OperatingMode nextMode() override { return vals.nextMode; }
     virtual bool routeToMonitor(ThreadContext *tc) const override {
@@ -333,6 +325,8 @@ class SupervisorTrap : public ArmFaultVals<SupervisorTrap>
         overrideEc(_overrideEc)
     {}
 
+    bool routeToHyp(ThreadContext *tc) const override;
+    uint32_t iss() const override;
     ExceptionClass ec(ThreadContext *tc) const override;
 };
 
